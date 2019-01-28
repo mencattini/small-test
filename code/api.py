@@ -2,77 +2,94 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from model import User, Skill, Credentials
-import argparse
 import warnings
-import json
+from bottle import route, response, run, request
+from json import dumps
 
 
-def init_cli():
-    parser = argparse.ArgumentParser(description="CRUD system")
-
-    parser.add_argument("--db", type=str, help="Path of the database.", default=".")
-    parser.add_argument(
-        "--operation",
-        type=str,
-        help="Type of operation we want to do. Possible operations are [create, research, update, delete",
-    )
-
-    # put the json.loads as type doesn't work. Don't know why. So need a small trick to return a json
-    parser.add_argument(
-        "--json",
-        type=json.loads,
-        help='A json structure with the mandatory field from wished operation such as\
-        "{"type": "user","firstname":"rené","lastname":"Marshall"}"',
-    )
-    return parser.parse_args()
+def serialize_object(obj):
+    dic = obj.__dict__.copy()
+    for key, value in obj.__dict__.items():
+        if "_" in key or "_" in key:
+            del (dic[key])
+    return dic
 
 
-def create(d, session):
+def init_operation(d):
     class_type = {}
-    class_type["user"] = User()
-    class_type["skill"] = Skill()
-    class_type["credentials"] = Credentials()
+    class_type["user"] = User
+    class_type["skill"] = Skill
+    class_type["credentials"] = Credentials
 
     entry = class_type.get(d["type"].lower(), "error")
     if entry == "error":
         warnings.simplefilter("error", Warning)
         warnings.warn("Unknown type")
+    return entry
 
+
+@route("/crud/create", method="PUT")
+def create():
+
+    json = request.json
+    entry = init_operation(json)()
     attributes = [attr for attr in dir(entry) if not attr.startswith("__")]
-    for key in d.keys():
-        if key != "type" and key in attributes:
-            entry.__dict__[key] = d[key]
 
-    # TODO add a research to check the unique constraint
+    for key in json.keys():
+        if key != "type" and key in attributes:
+            setattr(entry, key, json[key])
+
     session.add(entry)
     session.commit()
 
 
-def delete(d, session):
-    pass
+@route("/crud/delete", method="DELETE")
+def delete():
+    results = research()
+    for ele in results:
+        session.delete(ele)
+    session.commit()
 
 
-def research(d, session):
-    pass
+@route("/crud/research")
+def research():
+    json = request.json
+    my_class = init_operation(json)
+    del json["type"]
+
+    query = session.query(my_class)
+    for key, value in json.items():
+        query = query.filter(getattr(my_class, key) == value)
+    results = query.all()
+    response.content_type = "application/json"
+
+    return dumps([serialize_object(ele) for ele in results])
 
 
-def update(d, session):
-    pass
+@route("/crud/update", method="PUT")
+def update():
+    my_class = init_operation(d)
+
+    new_value = d["new_value"]
+    del d["type"]
+    del d["new_value"]
+    query = session.query(my_class)
+    for key, value in d.items():
+        query = query.filter(getattr(my_class, key) == value)
+    row = query.first()
+
+    for key, value in new_value.items():
+        setattr(row, key, value)
+
+    session.commit()
 
 
 if __name__ == "__main__":
-    # init the cli arguments
-    args = init_cli()
     # setup the ORM part with sqlalchemy
-    engine = create_engine(f"sqlite:///{args.db}/sqlite3.db")
+    engine = create_engine(f"sqlite:///../sqlite3.db")
     Base = declarative_base()
     Base.metadata.bind = engine
     DBSession = sessionmaker(bind=engine)
     session = DBSession()
 
-    operations = {}
-    operations["create"] = create
-    operations["research"] = research
-    operations["update"] = update
-    operations["delete"] = delete
-    create(args.json, session)
+    run(host="localhost", port=8080, debug=True)
