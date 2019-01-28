@@ -7,12 +7,11 @@ Base = declarative_base()
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True)
     firstname = Column(String)
     lastname = Column(String)
-    fullname = Column(String)
+    fullname = Column(String, primary_key=True)
+    email = Column(String, primary_key=True)
     address = Column(String)
-    email = Column(String)
     mobile_phone = Column(Integer)
 
 
@@ -20,7 +19,8 @@ class Skill(Base):
     __tablename__ = "skills"
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_fullname = Column(String, ForeignKey("users.fullname"))
+    user_email = Column(String, ForeignKey("users.email"))
     name = Column(String)
     level = Column(String)
 
@@ -30,8 +30,8 @@ class Credentials(Base):
     __tablename__ = "credentials"
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("users.id"))
-    id_identification = Column(String, ForeignKey("users.email"))
+    user_fullname = Column(String, ForeignKey("users.fullname"))
+    user_email = Column(String, ForeignKey("users.email"))
     password = Column(String)
 
 
