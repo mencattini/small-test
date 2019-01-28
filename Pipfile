@@ -12,6 +12,7 @@ black = "*"
 [packages]
 sqlalchemy = "*"
 argparse = "*"
+bottle = "*"
 
 [requires]
 python_version = "3.6"
