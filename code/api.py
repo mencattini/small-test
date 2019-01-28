@@ -42,6 +42,8 @@ def create(d, session):
     for key in d.keys():
         if key != "type" and key in attributes:
             entry.__dict__[key] = d[key]
+
+    # TODO add a research to check the unique constraint
     session.add(entry)
     session.commit()
 
