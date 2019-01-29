@@ -1,9 +1,9 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, exc
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from model import User, Skill, Credentials
 import warnings
-from bottle import route, response, run, request
+from bottle import route, response, run, request, HTTPResponse
 from json import dumps
 
 
@@ -39,16 +39,31 @@ def create():
         if key != "type" and key in attributes:
             setattr(entry, key, json[key])
 
-    session.add(entry)
-    session.commit()
+    try:
+        session.add(entry)
+        session.commit()
+    except exc.IntegrityError:
+        warnings.simplefilter("default", Warning)
+        warnings.warn("You tried to add an already existing item.")
+        session.rollback()
+    return HTTPResponse(status=201)
 
 
 @route("/crud/delete", method="DELETE")
 def delete():
-    results = research()
+    json = request.json
+    my_class = init_operation(json)
+    del json["type"]
+
+    query = session.query(my_class)
+    for key, value in json.items():
+        query = query.filter(getattr(my_class, key) == value)
+    results = query.all()
+
     for ele in results:
         session.delete(ele)
     session.commit()
+    return HTTPResponse(status=200)
 
 
 @route("/crud/research")
@@ -63,18 +78,21 @@ def research():
     results = query.all()
     response.content_type = "application/json"
 
-    return dumps([serialize_object(ele) for ele in results])
+    return HTTPResponse(
+        status=200, body=dumps([serialize_object(ele) for ele in results])
+    )
 
 
-@route("/crud/update", method="PUT")
+@route("/crud/update", method="POST")
 def update():
-    my_class = init_operation(d)
+    json = request.json
+    my_class = init_operation(json)
 
-    new_value = d["new_value"]
-    del d["type"]
-    del d["new_value"]
+    new_value = json["new_value"]
+    del json["type"]
+    del json["new_value"]
     query = session.query(my_class)
-    for key, value in d.items():
+    for key, value in json.items():
         query = query.filter(getattr(my_class, key) == value)
     row = query.first()
 
@@ -82,6 +100,7 @@ def update():
         setattr(row, key, value)
 
     session.commit()
+    return HTTPResponse(stauts=200)
 
 
 if __name__ == "__main__":
