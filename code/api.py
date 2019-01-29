@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine, exc
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from model import User, Skill, Credentials
+from model import User, Skill
 import warnings
 from bottle import route, response, run, request, HTTPResponse
 from json import dumps
@@ -19,7 +19,6 @@ def init_operation(d):
     class_type = {}
     class_type["user"] = User
     class_type["skill"] = Skill
-    class_type["credentials"] = Credentials
 
     entry = class_type.get(d["type"].lower(), "error")
     if entry == "error":
