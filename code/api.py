@@ -1,39 +1,43 @@
-from sqlalchemy import create_engine, exc
+from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from model import User, Skill
+from bottle import run
+from sqlalchemy import exc
 import warnings
-from bottle import route, response, run, request, HTTPResponse
-from json import dumps
+from bottle import route, request, HTTPResponse
+from model import User, Skill
 
 
-def serialize_object(obj):
-    dic = obj.__dict__.copy()
-    for key, value in obj.__dict__.items():
-        if "_" in key or "_" in key:
-            del (dic[key])
-    return dic
+def search(json, classe):
+    query = session.query(classe)
+    for key, value in json.items():
+        query = query.filter(getattr(classe, key) == value)
+    results = query.all()
+
+    return results
 
 
-def init_operation(d):
-    class_type = {}
-    class_type["user"] = User
-    class_type["skill"] = Skill
-
-    entry = class_type.get(d["type"].lower(), "error")
-    if entry == "error":
-        warnings.simplefilter("error", Warning)
-        warnings.warn("Unknown type")
-    return entry
-
-
-@route("/crud/create", method="PUT")
-def create():
-
+@route("/user/create", method="PUT")
+def user_create():
+    # TODO change from a simple skill_id to a list of skill_id
+    # we get the json from REST
     json = request.json
-    entry = init_operation(json)()
-    attributes = [attr for attr in dir(entry) if not attr.startswith("__")]
 
+    # get all attributes
+    entry = User()
+    attributes = [attr for attr in dir(entry) if not attr.startswith("__")]
+    # take away the away the skill_id if exists
+    skill_id = json.get("skill_id", None)
+    if skill_id:
+        del json["skill_id"]
+        # we search if the skill exists
+        results = search({"skill_id": skill_id}, Skill)
+        # we check that skill arent already in the user skills and if not we had it
+        for skill in results:
+            if skill not in entry.skills:
+                entry.skills += [skill]
+
+    # we set all attr except skill
     for key in json.keys():
         if key != "type" and key in attributes:
             setattr(entry, key, json[key])
@@ -48,16 +52,11 @@ def create():
     return HTTPResponse(status=201)
 
 
-@route("/crud/delete", method="DELETE")
-def delete():
+@route("/user/delete", method="DELETE")
+def user_delete():
     json = request.json
-    my_class = init_operation(json)
-    del json["type"]
-
-    query = session.query(my_class)
-    for key, value in json.items():
-        query = query.filter(getattr(my_class, key) == value)
-    results = query.all()
+    my_class = User
+    results = search(json, my_class)
 
     for ele in results:
         session.delete(ele)
@@ -65,42 +64,33 @@ def delete():
     return HTTPResponse(status=200)
 
 
-@route("/crud/research")
-def research():
+@route("/user/research")
+def user_research():
     json = request.json
-    my_class = init_operation(json)
-    del json["type"]
+    results = search(json, User)
 
-    query = session.query(my_class)
-    for key, value in json.items():
-        query = query.filter(getattr(my_class, key) == value)
-    results = query.all()
-    response.content_type = "application/json"
-
-    return HTTPResponse(
-        status=200, body=dumps([serialize_object(ele) for ele in results])
-    )
+    return HTTPResponse(status=200, body="<br>".join([str(ele) for ele in results]))
 
 
-@route("/crud/update", method="POST")
-def update():
+@route("/user/update", method="POST")
+def user_update():
     json = request.json
-    my_class = init_operation(json)
+    my_class = User
 
-    new_value = json["new_value"]
-    del json["type"]
-    del json["new_value"]
     query = session.query(my_class)
     for key, value in json.items():
         query = query.filter(getattr(my_class, key) == value)
     row = query.first()
 
-    for key, value in new_value.items():
+    # TODO add update for skill based on skill id
+    for key, value in json.items():
         setattr(row, key, value)
 
     session.commit()
     return HTTPResponse(stauts=200)
 
+
+# TODO add the same function for skill
 
 if __name__ == "__main__":
     # setup the ORM part with sqlalchemy
