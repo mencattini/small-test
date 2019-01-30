@@ -19,7 +19,6 @@ def search(json, classe):
 
 @route("/user/create", method="PUT")
 def user_create():
-    # TODO change from a simple skill_id to a list of skill_id
     # we get the json from REST
     json = request.json
 
@@ -27,15 +26,16 @@ def user_create():
     entry = User()
     attributes = [attr for attr in dir(entry) if not attr.startswith("__")]
     # take away the away the skill_id if exists
-    skill_id = json.get("skill_id", None)
-    if skill_id:
-        del json["skill_id"]
-        # we search if the skill exists
-        results = search({"skill_id": skill_id}, Skill)
-        # we check that skill arent already in the user skills and if not we had it
-        for skill in results:
-            if skill not in entry.skills:
-                entry.skills += [skill]
+    skills = json.get("skills", [])
+    if skills:
+        del json["skills"]
+        # we search if the skill exists for each skill
+        for skill in skills:
+            results = search({"skill_id": skill}, Skill)
+            # we check that skill arent already in the user skills and if not we had it
+            for skill in results:
+                if skill not in entry.skills:
+                    entry.skills += [skill]
 
     # we set all attr except skill
     for key in json.keys():
@@ -77,12 +77,33 @@ def user_update():
     json = request.json
     my_class = User
 
-    query = session.query(my_class)
-    for key, value in json.items():
-        query = query.filter(getattr(my_class, key) == value)
+    user_id = json.get("user_id", None)
+    if not user_id:
+        warnings.simplefilter("error", Warning)
+        warnings.warn("You need to specify user_id")
+
+    # we use the id to search user
+    query = session.query(my_class).filter(
+        getattr(my_class, "user_id") == json["user_id"]
+    )
     row = query.first()
 
-    # TODO add update for skill based on skill id
+    # we check the skills
+    skills = json.get("skills", None)
+    # if it exists
+    if skills == []:
+        del json["skills"]
+        setattr(row, "skills", [])
+    elif skills:
+        del json["skills"]
+        # we search if the skill exists for each skill
+        for skill_id in skills:
+            results = search({"skill_id": skill_id}, Skill)
+            # we check that skill arent already in the user skills and if not we had it
+            for skill in results:
+                if skill not in row.skills:
+                    row.skills += [skill]
+
     for key, value in json.items():
         setattr(row, key, value)
 
