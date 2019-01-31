@@ -32,7 +32,7 @@ class User(Base):
     address = Column(String)
     mobile_phone = Column(String)
 
-    skills = relationship("Skill", secondary=association_table, backref="users")
+    skills = relationship("Skill", secondary=association_table)
 
     def __repr__(self):
         return (
@@ -49,8 +49,13 @@ class Skill(Base):
     name = Column(String)
     level = Column(String)
 
+    users = relationship("User", secondary=association_table)
+
     def __repr__(self):
-        return f"Skill(skill_id={self.skill_id}, name={self.name}, level={self.level}"
+        return (
+            f"Skill(skill_id={self.skill_id}, name={self.name}, level={self.level}"
+            + f", users={[ele.user_id for ele in self.users]})"
+        )
 
 
 engine = create_engine("sqlite:///../sqlite3.db")
