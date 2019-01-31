@@ -6,41 +6,16 @@ from sqlalchemy import exc
 import warnings
 from bottle import route, request, HTTPResponse
 from model import User, Skill
+from utilitiy import search, delete, create, set_ext
 
 
-def search(json, classe):
-    query = session.query(classe)
-    for key, value in json.items():
-        query = query.filter(getattr(classe, key) == value)
-    results = query.all()
-
-    return results
-
-
+# create methods
 @route("/user/create", method="PUT")
 def user_create():
     # we get the json from REST
     json = request.json
 
-    # get all attributes
-    entry = User()
-    attributes = [attr for attr in dir(entry) if not attr.startswith("__")]
-    # take away the away the skill_id if exists
-    skills = json.get("skills", [])
-    if skills:
-        del json["skills"]
-        # we search if the skill exists for each skill
-        for skill in skills:
-            results = search({"skill_id": skill}, Skill)
-            # we check that skill arent already in the user skills and if not we had it
-            for skill in results:
-                if skill not in entry.skills:
-                    entry.skills += [skill]
-
-    # we set all attr except skill
-    for key in json.keys():
-        if key != "type" and key in attributes:
-            setattr(entry, key, json[key])
+    entry = create(json, User, Skill, session, "skills", "skill_id")
 
     try:
         session.add(entry)
@@ -52,26 +27,56 @@ def user_create():
     return HTTPResponse(status=201)
 
 
+@route("/skill/create", method="PUT")
+def skill_create():
+    # we get the json from REST
+    json = request.json
+
+    entry = create(json, Skill, User, session, "users", "user_id")
+
+    try:
+        session.add(entry)
+        session.commit()
+    except exc.IntegrityError:
+        warnings.simplefilter("default", Warning)
+        warnings.warn("You tried to add an already existing item.")
+        session.rollback()
+    return HTTPResponse(status=201)
+
+
+# delete methods
 @route("/user/delete", method="DELETE")
 def user_delete():
     json = request.json
-    my_class = User
-    results = search(json, my_class)
-
-    for ele in results:
-        session.delete(ele)
-    session.commit()
+    delete(json, User, session)
     return HTTPResponse(status=200)
 
 
+@route("/skill/delete", method="DELETE")
+def skill_delete():
+    json = request.json
+    delete(json, Skill, session)
+    return HTTPResponse(status=200)
+
+
+# research methods
 @route("/user/research")
 def user_research():
     json = request.json
-    results = search(json, User)
+    results = search(json, User, session)
 
     return HTTPResponse(status=200, body="<br>".join([str(ele) for ele in results]))
 
 
+@route("/skill/research")
+def skill_research():
+    json = request.json
+    results = search(json, Skill, session)
+
+    return HTTPResponse(status=200, body="<br>".join([str(ele) for ele in results]))
+
+
+# update methods
 @route("/user/update", method="POST")
 def user_update():
     json = request.json
@@ -88,21 +93,7 @@ def user_update():
     )
     row = query.first()
 
-    # we check the skills
-    skills = json.get("skills", None)
-    # if it exists
-    if skills == []:
-        del json["skills"]
-        setattr(row, "skills", [])
-    elif skills:
-        del json["skills"]
-        # we search if the skill exists for each skill
-        for skill_id in skills:
-            results = search({"skill_id": skill_id}, Skill)
-            # we check that skill arent already in the user skills and if not we had it
-            for skill in results:
-                if skill not in row.skills:
-                    row.skills += [skill]
+    row = set_ext(row, json, Skill, session, "skills", "skill_id")
 
     for key, value in json.items():
         setattr(row, key, value)
@@ -111,7 +102,30 @@ def user_update():
     return HTTPResponse(stauts=200)
 
 
-# TODO add the same function for skill
+@route("/skill/update", method="POST")
+def skill_update():
+    json = request.json
+    my_class = Skill
+
+    skill_id = json.get("skill_id", None)
+    if not skill_id:
+        warnings.simplefilter("error", Warning)
+        warnings.warn("You need to specify skill_id")
+
+    # we use the id to search skill
+    query = session.query(my_class).filter(
+        getattr(my_class, "skill_id") == json["skill_id"]
+    )
+    row = query.first()
+
+    row = set_ext(row, json, User, session, "users", "user_id")
+
+    for key, value in json.items():
+        setattr(row, key, value)
+
+    session.commit()
+    return HTTPResponse(stauts=200)
+
 
 if __name__ == "__main__":
     # setup the ORM part with sqlalchemy
